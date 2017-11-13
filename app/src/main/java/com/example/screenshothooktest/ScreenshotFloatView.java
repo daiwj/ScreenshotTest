@@ -27,7 +27,7 @@ public class ScreenshotFloatView extends DragFloatView<String> {
     @Override
     protected View onCreateView() {
         View contentView = LayoutInflater.from(getActivity()).inflate(R.layout.layout_float_view, null);
-        imageView = findViewById(R.id.image);
+        imageView = contentView.findViewById(R.id.image);
         return contentView;
     }
 

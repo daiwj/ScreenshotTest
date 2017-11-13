@@ -30,4 +30,10 @@ public class MainActivity extends Activity implements ScreenshotMonitor.Watcher 
             view.create();
         }
     }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        ScreenshotMonitor.getInstance(this).stopWatching();
+    }
 }
