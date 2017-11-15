@@ -34,7 +34,7 @@ public abstract class DragFloatView<Data> implements View.OnTouchListener {
     private int mTouchSlop = 0;
     private int mDefaultLocationY = 0;
     private int mBottomLimitHeight = 0;
-    private long mKeepSizeTimeMillis = 0;
+    private long mKeepSideTimeMillis = 0;
 
     private int mClickX = 0;
     private int mClickY = 0;
@@ -46,7 +46,7 @@ public abstract class DragFloatView<Data> implements View.OnTouchListener {
     private boolean isKeepSide = false;
     private boolean isDraggable = true;
 
-    private ValueAnimator animator;
+    private ValueAnimator mKeepSideAnimator;
 
     private boolean isAdded = false;
 
@@ -58,11 +58,14 @@ public abstract class DragFloatView<Data> implements View.OnTouchListener {
         mScreenHeight = dm.heightPixels;
 
         final int[] size = generateWindowSize();
+        if (size == null) {
+            throw new IllegalArgumentException("Override method generateWindowSize and return the window size first!");
+        }
         mWidth = size[0];
         mHeight = size[1];
 
         mDefaultLocationY = getDefaultLocationY();
-        mKeepSizeTimeMillis = getKeepSizeTimeMillis();
+        mKeepSideTimeMillis = getKeepSideTimeMillis();
         mBottomLimitHeight = getBottomLimitHeight();
         isKeepSide = isKeepSide();
         isDraggable = isDraggable();
@@ -71,7 +74,7 @@ public abstract class DragFloatView<Data> implements View.OnTouchListener {
 
         mContentView = onCreateView();
         if (mContentView == null) {
-            throw new IllegalArgumentException("No content view was found");
+            throw new IllegalArgumentException("No content view was found!");
         }
 
         mContentView.setOnTouchListener(this);
@@ -100,7 +103,7 @@ public abstract class DragFloatView<Data> implements View.OnTouchListener {
         return mScreenHeight - mHeight * 2;
     }
 
-    public long getKeepSizeTimeMillis() {
+    public long getKeepSideTimeMillis() {
         return 500l;
     }
 
@@ -181,8 +184,8 @@ public abstract class DragFloatView<Data> implements View.OnTouchListener {
             case MotionEvent.ACTION_DOWN:
                 mClickX = motionX;
                 mClickY = motionY;
-                if (animator != null && animator.isRunning()) {
-                    animator.cancel();
+                if (mKeepSideAnimator != null && mKeepSideAnimator.isRunning()) {
+                    mKeepSideAnimator.cancel();
                 }
                 break;
             case MotionEvent.ACTION_MOVE:
@@ -216,8 +219,8 @@ public abstract class DragFloatView<Data> implements View.OnTouchListener {
         final boolean isOutOfBounds = currentY > mBottomLimitHeight;
         final int endY = isOutOfBounds ? mDefaultLocationY : currentY;
 
-        animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+        mKeepSideAnimator = ValueAnimator.ofFloat(0f, 1f);
+        mKeepSideAnimator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
             @Override
             public void onAnimationUpdate(ValueAnimator animation) {
                 float offsetValue = ((Float) animation.getAnimatedValue()).floatValue();
@@ -226,8 +229,8 @@ public abstract class DragFloatView<Data> implements View.OnTouchListener {
                 mWindowManager.updateViewLayout(mContentView, mLayoutParam);
             }
         });
-        animator.setDuration(mKeepSizeTimeMillis);
-        animator.start();
+        mKeepSideAnimator.setDuration(mKeepSideTimeMillis);
+        mKeepSideAnimator.start();
     }
 
     public <T extends View> T findViewById(int id) {
