@@ -6,18 +6,19 @@ import android.os.FileObserver;
 import android.view.View;
 import android.widget.Toast;
 
-public class MainActivity extends Activity implements ScreenshotMonitor.Watcher {
+public class MainActivity extends Activity implements Watcher {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        ScreenshotMonitor.getInstance(this).register(this);
+
+        ScreenshotMonitorV2.getInstance(this).register(this);
     }
 
     @Override
     public void onWatch(int event, String path) {
-        if (event == FileObserver.CLOSE_WRITE) {
+        if (event == FileObserver.CLOSE_WRITE || event == FileObserver.CLOSE_NOWRITE) {
             final DragFloatView view = new ScreenshotFloatView(this);
             view.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -34,6 +35,5 @@ public class MainActivity extends Activity implements ScreenshotMonitor.Watcher 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        ScreenshotMonitor.getInstance(this).stopWatching();
     }
 }
