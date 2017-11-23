@@ -26,8 +26,8 @@ public class ScreenshotMonitorV2 {
     private final Handler H = new Handler();
 
     private static ScreenshotMonitorV2 sMonitor;
-    private ContentResolver mContentResolver; // 媒体文件全局监听
-    private ContentObserver mExternalObserver; // 媒体文件全局监听
+    private ContentResolver mContentResolver;
+    private ContentObserver mExternalObserver;
     private Watcher mWatcher;
 
     private final List<String> FILTERS = new ArrayList<>();
