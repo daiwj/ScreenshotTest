@@ -1,12 +1,11 @@
 package com.example.screenshothooktest;
 
+import android.content.ContentResolver;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.database.Cursor;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Environment;
-import android.os.FileObserver;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.provider.MediaStore;
@@ -24,9 +23,12 @@ public class ScreenshotMonitorV2 {
     public static final String TAG = ScreenshotMonitorV2.class.getSimpleName();
     public static final String EXTRA_FILE_PATH = "screenshot_file_path";
 
-    private Context mContext;
-
     private final Handler H = new Handler();
+
+    private static ScreenshotMonitorV2 sMonitor;
+    private ContentResolver mContentResolver; // 媒体文件全局监听
+    private ContentObserver mExternalObserver; // 媒体文件全局监听
+    private Watcher mWatcher;
 
     private final List<String> FILTERS = new ArrayList<>();
 
@@ -38,27 +40,22 @@ public class ScreenshotMonitorV2 {
         }
     }
 
-    private final String FILE_NAME_PREFIX = "screenshot";
-    private final String PATH_SCREENSHOT = "screenshots/";
-
     private final Uri EXTERNAL_CONTENT_URI = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
 
-    private ContentObserver mExternalObserver; // 媒体文件全局监听
-
     private ScreenshotMonitorV2(Context context) {
-        mContext = context;
         if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-            HandlerThread thread = new HandlerThread("Screenshot_Observer");
+
+            mContentResolver = context.getContentResolver();
+
+            HandlerThread thread = new HandlerThread("ScreenshotObserver");
             thread.start();
             Handler handler = new Handler(thread.getLooper());
             mExternalObserver = new MediaContentObserver(handler);
+
         }
     }
 
-    private static ScreenshotMonitorV2 sMonitor;
-    private Watcher mWatcher;
-
-    public static ScreenshotMonitorV2 getInstance(Context context) {
+    public static ScreenshotMonitorV2 get(Context context) {
         if (sMonitor == null) {
             synchronized (ScreenshotMonitorV2.class) {
                 if (sMonitor == null) {
@@ -70,17 +67,28 @@ public class ScreenshotMonitorV2 {
     }
 
     public void startWatching() {
-        if (mExternalObserver != null) {
+        if (mContentResolver != null && mExternalObserver != null) {
             Log.i(TAG, "start watching on: " + EXTERNAL_CONTENT_URI.getPath());
-            mContext.getContentResolver().registerContentObserver(EXTERNAL_CONTENT_URI, true, mExternalObserver);
+            mContentResolver.registerContentObserver(EXTERNAL_CONTENT_URI, true, mExternalObserver);
         }
     }
 
-    public void stopWatching() {
-        if (mExternalObserver != null) {
-            mContext.getContentResolver().unregisterContentObserver(mExternalObserver);
+    private void stopWatching() {
+        if (mContentResolver != null && mExternalObserver != null) {
+            mContentResolver.unregisterContentObserver(mExternalObserver);
         }
+    }
 
+    /**
+     * 释放强引用， 避免内存泄露
+     */
+    public void free() {
+        stopWatching();
+
+        H.removeCallbacksAndMessages(null);
+
+        mContentResolver = null;
+        mExternalObserver = null;
         mWatcher = null;
         sMonitor = null;
     }
@@ -96,9 +104,8 @@ public class ScreenshotMonitorV2 {
     private final class MediaContentObserver extends ContentObserver {
 
         private final String[] PROJECTION = {
-                MediaStore.Images.Media._ID,
-                MediaStore.Images.Media.DISPLAY_NAME,
-                MediaStore.Images.Media.DATA
+                MediaStore.Images.Media.DATA, // image path
+                MediaStore.Images.Media.DATE_ADDED // image create time
         };
 
         private final String ORDER = MediaStore.Images.ImageColumns.DATE_ADDED + " desc limit 1";
@@ -109,38 +116,46 @@ public class ScreenshotMonitorV2 {
 
         @Override
         public void onChange(boolean selfChange) {
-            onChange(selfChange, null);
+            Log.i(TAG, "ContentObserver onChange nothing (sdk < 16)");
+            handleContentChanged(null);
         }
 
         @Override
         public void onChange(boolean selfChange, Uri uri) {
-            Log.i(TAG, "onChange " + uri.getPath());
             if (isSingleImageFile(uri)) {
-                handleMediaContentChange(uri);
+                Log.i(TAG, "ContentObserver onChange " + uri.getPath());
+                handleContentChanged(uri);
             }
         }
 
         private boolean isSingleImageFile(Uri uri) {
-            return uri.toString().matches(EXTERNAL_CONTENT_URI.toString() + "/[0-9]+");
+            return uri != null && uri.toString().matches(EXTERNAL_CONTENT_URI.toString() + "/[0-9]+");
         }
 
-        private void handleMediaContentChange(Uri contentUri) {
+        private void handleContentChanged(Uri uri) {
             Cursor cursor = null;
             try {
-                cursor = mContext.getContentResolver().query(contentUri, PROJECTION, null, null, ORDER);
+                if (uri == null) { // sdk < 16
+                    cursor = mContentResolver.query(EXTERNAL_CONTENT_URI, PROJECTION, null, null, ORDER);
+                } else {
+                    cursor = mContentResolver.query(uri, PROJECTION, null, null, ORDER);
+                }
                 if (cursor != null && cursor.moveToFirst()) {
-                    final int dataIndex = cursor.getColumnIndex(MediaStore.Images.ImageColumns.DATA);
-                    final String imagePath = cursor.getString(dataIndex);
-                    Log.i(TAG, "imagePath: " + imagePath);
-                    if (isPathScreenshot(imagePath)) {
-                        H.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (mWatcher != null) {
-                                    mWatcher.onWatch(FileObserver.CLOSE_WRITE, imagePath);
+                    final String imagePath = cursor.getString(cursor.getColumnIndex(MediaStore.Images.ImageColumns.DATA));
+                    Log.i(TAG, "ContentObserver imagePath: " + imagePath);
+                    final long createTime = cursor.getLong(cursor.getColumnIndex(MediaStore.Images.ImageColumns.DATE_ADDED));
+                    final long currentTime = System.currentTimeMillis() / 1000;
+                    if (Math.abs(currentTime - createTime) <= 3) {
+                        if (isScreenshotPath(imagePath)) {
+                            H.postDelayed(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (mWatcher != null) {
+                                        mWatcher.onWatch(imagePath);
+                                    }
                                 }
-                            }
-                        });
+                            }, uri == null ? 500 : 0);
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -151,20 +166,16 @@ public class ScreenshotMonitorV2 {
                 }
             }
         }
-    }
 
-    private boolean isFileScreenshot(String fileName) {
-        return fileName.toLowerCase().startsWith(FILE_NAME_PREFIX);
-    }
-
-    private boolean isPathScreenshot(String path) {
-        boolean filtered = false;
-        for (String filter : FILTERS) {
-            filtered = path.toLowerCase().contains(filter);
-            if (filtered) {
-                return true;
+        private boolean isScreenshotPath(String path) {
+            boolean filtered = false;
+            for (String filter : FILTERS) {
+                filtered = path.toLowerCase().contains(filter);
+                if (filtered) {
+                    return true;
+                }
             }
+            return filtered;
         }
-        return filtered;
     }
 }

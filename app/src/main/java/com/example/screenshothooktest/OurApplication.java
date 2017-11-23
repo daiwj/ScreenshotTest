@@ -10,6 +10,7 @@ public class OurApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-        ScreenshotMonitorV2.getInstance(this).startWatching();
+
+        ScreenshotMonitorV2.get(this).startWatching();
     }
 }

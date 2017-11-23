@@ -1,7 +1,6 @@
 package com.example.screenshothooktest;
 
 import android.content.Context;
-import android.graphics.BitmapFactory;
 import android.os.Environment;
 import android.os.FileObserver;
 import android.os.Handler;
@@ -12,20 +11,18 @@ import java.util.ArrayList;
 
 /**
  * @author dwj  2017/11/10 16:31
+ * @deprecated
  */
-
 public class ScreenshotMonitor {
 
     public static final String TAG = ScreenshotMonitor.class.getSimpleName();
     public static final String EXTRA_FILE_PATH = "screenshot_file_path";
 
-    private Context mContext;
-
     private final Handler H = new Handler();
 
     private final ArrayList<ScreenshotObserver> observerList = new ArrayList<>(); // sdcard 截屏目录直接监听
 
-    {
+    private ScreenshotMonitor(Context context) {
         if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
             try {
                 final String ROOT = Environment.getExternalStorageDirectory().getAbsolutePath() + "/";
@@ -40,28 +37,10 @@ public class ScreenshotMonitor {
         }
     }
 
-    private BitmapFactory.Options OPTIONS = new BitmapFactory.Options();
-
-    {
-        OPTIONS.inJustDecodeBounds = true;
-    }
-
-    public interface Watcher {
-        /**
-         * @param event {@link FileObserver#ALL_EVENTS}
-         * @param path  file path
-         */
-        void onWatch(int event, String path);
-    }
-
-    private ScreenshotMonitor(Context context) {
-        mContext = context;
-    }
-
     private static ScreenshotMonitor sMonitor;
     private Watcher mWatcher;
 
-    public static ScreenshotMonitor getInstance(Context context) {
+    public static ScreenshotMonitor get(Context context) {
         if (sMonitor == null) {
             synchronized (ScreenshotMonitor.class) {
                 if (sMonitor == null) {
@@ -83,10 +62,22 @@ public class ScreenshotMonitor {
         }
     }
 
-    public void stopWatching() {
+    private void stopWatching() {
         for (ScreenshotObserver observer : observerList) {
             observer.stopWatching();
         }
+    }
+
+    /**
+     * 释放强引用， 避免内存泄露
+     */
+    public void free() {
+        stopWatching();
+
+        H.removeCallbacksAndMessages(null);
+
+        mWatcher = null;
+        sMonitor = null;
     }
 
     /**
@@ -108,29 +99,27 @@ public class ScreenshotMonitor {
 
         @Override
         public void onEvent(final int event, @Nullable final String path) {
-            Log.i(TAG, "ScreenshotMonitor event: " + event);
             final String imagePath = dir + "/" + path;
             if (event == CLOSE_WRITE || event == CLOSE_NOWRITE) {
                 Log.i(TAG, "ScreenshotMonitor CREATE: " + imagePath);
-                onWatch(FileObserver.CLOSE_WRITE, imagePath);
+                onWatch(imagePath);
             } else if (event == DELETE) {
                 Log.i(TAG, "ScreenshotMonitor DELETE: " + imagePath);
-                onWatch(FileObserver.DELETE, imagePath);
+                onWatch(imagePath);
             }
         }
 
         /**
          * run in ui-thread
          *
-         * @param event
          * @param path
          */
-        private void onWatch(final int event, @Nullable final String path) {
+        private void onWatch(@Nullable final String path) {
             H.post(new Runnable() {
                 @Override
                 public void run() {
                     if (mWatcher != null) {
-                        mWatcher.onWatch(event, path);
+                        mWatcher.onWatch(path);
                     } else {
                         Log.i(TAG, "ScreenshotMonitor Watcher is null");
                     }
