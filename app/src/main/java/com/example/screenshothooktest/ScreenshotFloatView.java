@@ -41,6 +41,14 @@ public class ScreenshotFloatView extends DragFloatView<String> {
         }
     }
 
+    public void applyData(Bitmap source) {
+        if (source != null) {
+            int[] size = generateWindowSize();
+            Bitmap bitmap = Bitmap.createScaledBitmap(source, size[0], size[1], false);
+            imageView.setImageBitmap(bitmap);
+        }
+    }
+
     @Override
     protected int[] generateWindowSize() {
         return new int[]{dp2px(81), dp2px(146)};
