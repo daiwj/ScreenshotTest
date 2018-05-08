@@ -129,7 +129,8 @@ public class ScreenshotMonitorV2 {
         }
 
         private boolean isSingleImageFile(Uri uri) {
-            return uri != null && uri.toString().matches(EXTERNAL_CONTENT_URI.toString() + "/[0-9]+");
+            //return uri != null && uri.toString().matches(EXTERNAL_CONTENT_URI.toString() + "/[0-9]+");//在小米有的手机上测试不通过
+            return uri != null && uri.toString().matches(EXTERNAL_CONTENT_URI.toString() + "/*|/[0-9]+");
         }
 
         private void handleContentChanged(Uri uri) {
